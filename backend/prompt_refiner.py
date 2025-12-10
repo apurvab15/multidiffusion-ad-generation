@@ -4,16 +4,23 @@ Uses Claude API to enhance basic prompts into detailed, region-specific prompts
 """
 
 import json
-from google import genai
+import os
 from typing import Dict, List
 
-
+import google.generativeai as genai
+from dotenv import load_dotenv
 class PromptRefiner:
     """Refines basic prompts into detailed, region-specific prompts using Claude."""
     
     def __init__(self):
-        self.client = genai.Client(api_key="AIzaSyCdOhPxjaltzyYlML7aFQ5OFdlDyLij_OI")
-    
+        # Load env vars for local runs and configure Gemini client.
+        load_dotenv()
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("Set GEMINI_API_KEY or GOOGLE_API_KEY in the environment.")
+        genai.configure(api_key=api_key)
+        self.model = genai.GenerativeModel("gemini-2.5-flash")
+        
     def refine_prompt(
         self,
         basic_prompt: str,
@@ -75,12 +82,7 @@ Return your response as a JSON object with this structure:
 }}
 """
         
-        response = self.client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[
-                user_prompt
-            ]
-        )
+        response = self.model.generate_content(user_prompt)
         print(response.text)
         # Parse response
         response_text = response.text

@@ -22,4 +22,4 @@ LOGO_REGION_SIZE = (128, 128)  # Width, height for logo
 CLIP_MODEL = "ViT-B/32"
 
 # API keys
-GEMINI_API_KEY = "AIzaSyDFphVdNdeh6ClLlr1532BNl081rt-FRdQ"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
