@@ -3,3 +3,6 @@ torchvision
 diffusers==0.20.1
 transformers
 tqdm
+cv2
+skimage
+clip
