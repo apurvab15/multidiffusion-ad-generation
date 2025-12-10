@@ -1,13 +1,6 @@
 """
-Perceptual Contrast Optimization
+Perceptual Optimization Module
 Enhances generated ads using saliency detection and CV techniques
-
-Features:
-- Saliency detection (Grounding DINO + Spectral Residual fallback)
-- Adaptive contrast enhancement (CLAHE)
-- Edge sharpening with unsharp masking
-- Color vibrancy optimization
-- Region-aware processing
 """
 
 import torch
@@ -22,10 +15,10 @@ warnings.filterwarnings('ignore')
 class PerceptualOptimizer:
     """
     Optimize ad perceptual quality using:
-    1. Saliency detection (to find what draws attention)
+    1. Saliency detection
     2. Contrast enhancement
     3. Edge sharpening
-    4. Semantic region emphasis
+    4. Color vibrancy optimization
     """
     
     def __init__(self, device: str = "cuda"):
@@ -33,7 +26,7 @@ class PerceptualOptimizer:
         
         print("[INFO] Loading perceptual optimization models...")
         
-        # Try to load Grounding DINO for semantic saliency
+        # Try to load Grounding DINO
         self.has_grounding = False
         try:
             from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
@@ -57,7 +50,7 @@ class PerceptualOptimizer:
         image: Image.Image,
         target_regions: Optional[List[Tuple[int, int, int, int]]] = None,
         focus_keywords: str = "product, logo, text",
-        enhancement_level: str = "medium"  # low, medium, high
+        enhancement_level: str = "medium"
     ) -> Dict:
         """
         Optimize image perceptual quality.
@@ -106,7 +99,7 @@ class PerceptualOptimizer:
         )
         print(f"    → Sharpness improved by {results['analysis']['sharpness_improvement']:.1%}")
         
-        # Step 4: Color Vibrancy (in important regions)
+        # Step 4: Color Vibrancy
         print("  [4/4] Optimizing color vibrancy...")
         enhanced = self._enhance_vibrancy(enhanced, saliency_map, params)
         
@@ -145,15 +138,11 @@ class PerceptualOptimizer:
         image: Image.Image,
         focus_keywords: str
     ) -> np.ndarray:
-        """
-        Compute saliency map highlighting important regions.
-        Uses Grounding DINO if available, otherwise spectral residual.
-        """
+        """Compute saliency map highlighting important regions."""
         img_array = np.array(image)
         h, w = img_array.shape[:2]
         
         if self.has_grounding and focus_keywords:
-            # Use Grounding DINO for semantic saliency
             try:
                 saliency = self._grounding_dino_saliency(image, focus_keywords)
                 if saliency is not None:
@@ -161,7 +150,6 @@ class PerceptualOptimizer:
             except Exception as e:
                 print(f"    ⚠ Grounding DINO failed: {e}, using fallback")
         
-        # Fallback: Spectral Residual Saliency (fast, no ML needed)
         return self._spectral_residual_saliency(img_array)
     
     def _grounding_dino_saliency(
@@ -173,7 +161,6 @@ class PerceptualOptimizer:
         img_array = np.array(image)
         h, w = img_array.shape[:2]
         
-        # Process image
         inputs = self.processor(
             images=image,
             text=focus_keywords,
@@ -183,7 +170,6 @@ class PerceptualOptimizer:
         with torch.no_grad():
             outputs = self.grounding_model(**inputs)
         
-        # Get detection boxes and scores
         target_sizes = torch.tensor([[h, w]]).to(self.device)
         results = self.processor.post_process_grounded_object_detection(
             outputs,
@@ -193,7 +179,6 @@ class PerceptualOptimizer:
             target_sizes=target_sizes
         )[0]
         
-        # Create saliency map from detections
         saliency_map = np.zeros((h, w), dtype=np.float32)
         
         if len(results['boxes']) == 0:
@@ -203,23 +188,18 @@ class PerceptualOptimizer:
             x1, y1, x2, y2 = box.cpu().numpy().astype(int)
             score_val = score.cpu().item()
             
-            # Gaussian blob around detection
             center_x, center_y = (x1 + x2) // 2, (y1 + y2) // 2
             size = max(x2 - x1, y2 - y1)
             
-            # Create coordinate grids
             y_grid, x_grid = np.ogrid[:h, :w]
             
-            # Gaussian distribution centered on detection
             sigma = size / 3
             gaussian = np.exp(
                 -((x_grid - center_x)**2 + (y_grid - center_y)**2) / (2 * sigma**2)
             )
             
-            # Accumulate with score weighting
             saliency_map = np.maximum(saliency_map, gaussian * score_val)
         
-        # Normalize
         if saliency_map.max() > 0:
             saliency_map /= saliency_map.max()
         
@@ -230,30 +210,22 @@ class PerceptualOptimizer:
         Fast saliency detection using spectral residual method.
         Paper: "Saliency Detection: A Spectral Residual Approach" (Hou & Zhang, 2007)
         """
-        # Convert to grayscale
         if len(img.shape) == 3:
             gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY).astype(np.float32)
         else:
             gray = img.astype(np.float32)
         
-        # Apply Fourier transform
         fft = np.fft.fft2(gray)
         amplitude = np.abs(fft)
         phase = np.angle(fft)
         
-        # Compute log amplitude spectrum
         log_amplitude = np.log(amplitude + 1e-5)
-        
-        # Spectral residual = log amplitude - smoothed log amplitude
         residual = log_amplitude - cv2.boxFilter(log_amplitude, -1, (3, 3))
         
-        # Inverse FFT to get saliency map
         saliency = np.abs(np.fft.ifft2(np.exp(residual + 1j * phase)))
         
-        # Smooth with Gaussian
         saliency = cv2.GaussianBlur(saliency, (11, 11), 0)
         
-        # Normalize to [0, 1]
         if saliency.max() > saliency.min():
             saliency = (saliency - saliency.min()) / (saliency.max() - saliency.min())
         
@@ -264,19 +236,13 @@ class PerceptualOptimizer:
         saliency_map: np.ndarray,
         target_regions: Optional[List[Tuple[int, int, int, int]]]
     ) -> float:
-        """
-        Score how well saliency aligns with target regions.
-        Returns value between 0 and 1.
-        """
+        """Score how well saliency aligns with target regions."""
         if not target_regions or len(target_regions) == 0:
-            # No target regions specified, return mean saliency
             return float(np.mean(saliency_map))
         
-        # Calculate average saliency in target regions
         target_saliency = []
         
         for x1, y1, x2, y2 in target_regions:
-            # Ensure bounds are valid
             h, w = saliency_map.shape
             x1, x2 = max(0, int(x1)), min(w, int(x2))
             y1, y2 = max(0, int(y1)), min(h, int(y2))
@@ -288,7 +254,6 @@ class PerceptualOptimizer:
         if len(target_saliency) == 0:
             return float(np.mean(saliency_map))
         
-        # Return average saliency in target regions
         return float(np.mean(target_saliency))
     
     def _enhance_contrast(
@@ -297,24 +262,18 @@ class PerceptualOptimizer:
         saliency_map: np.ndarray,
         params: Dict
     ) -> Image.Image:
-        """
-        Enhance contrast adaptively based on saliency.
-        Uses CLAHE (Contrast Limited Adaptive Histogram Equalization).
-        """
+        """Enhance contrast adaptively based on saliency."""
         img_array = np.array(image)
         
-        # Convert to LAB color space (better for contrast manipulation)
         lab = cv2.cvtColor(img_array, cv2.COLOR_RGB2LAB)
         l_channel, a_channel, b_channel = cv2.split(lab)
         
-        # Apply CLAHE to L channel
         clahe = cv2.createCLAHE(
             clipLimit=params['clahe_clip'],
             tileGridSize=(8, 8)
         )
         l_enhanced = clahe.apply(l_channel)
         
-        # Resize saliency map to match image
         if saliency_map.shape != l_channel.shape:
             saliency_resized = cv2.resize(
                 saliency_map,
@@ -324,7 +283,6 @@ class PerceptualOptimizer:
         else:
             saliency_resized = saliency_map
         
-        # Blend based on saliency (more enhancement in salient regions)
         strength = params['contrast_strength']
         blend_factor = saliency_resized * (strength - 1) + 1
         
@@ -333,7 +291,6 @@ class PerceptualOptimizer:
             0, 255
         ).astype(np.uint8)
         
-        # Merge channels back
         lab_enhanced = cv2.merge([l_final, a_channel, b_channel])
         rgb_enhanced = cv2.cvtColor(lab_enhanced, cv2.COLOR_LAB2RGB)
         
@@ -345,20 +302,13 @@ class PerceptualOptimizer:
         saliency_map: np.ndarray,
         params: Dict
     ) -> Image.Image:
-        """
-        Sharpen edges selectively based on saliency.
-        Uses unsharp masking.
-        """
+        """Sharpen edges selectively based on saliency."""
         img_array = np.array(image).astype(np.float32)
         
-        # Create blurred version
         blurred = cv2.GaussianBlur(img_array, (0, 0), 3.0)
-        
-        # Unsharp mask = original + (original - blurred) * strength
         sharpened = img_array + (img_array - blurred) * params['sharpen_strength']
         sharpened = np.clip(sharpened, 0, 255)
         
-        # Resize saliency map
         if saliency_map.shape != img_array.shape[:2]:
             saliency_resized = cv2.resize(
                 saliency_map,
@@ -368,7 +318,6 @@ class PerceptualOptimizer:
         else:
             saliency_resized = saliency_map
         
-        # Apply sharpening more strongly in salient regions
         saliency_3ch = saliency_resized[:, :, np.newaxis]
         result = img_array * (1 - saliency_3ch) + sharpened * saliency_3ch
         result = np.clip(result, 0, 255).astype(np.uint8)
@@ -381,17 +330,12 @@ class PerceptualOptimizer:
         saliency_map: np.ndarray,
         params: Dict
     ) -> Image.Image:
-        """
-        Enhance color vibrancy in salient regions.
-        Increases saturation selectively.
-        """
+        """Enhance color vibrancy in salient regions."""
         img_array = np.array(image)
         
-        # Convert to HSV
         hsv = cv2.cvtColor(img_array, cv2.COLOR_RGB2HSV).astype(np.float32)
         h, s, v = cv2.split(hsv)
         
-        # Resize saliency map
         if saliency_map.shape != s.shape:
             saliency_resized = cv2.resize(
                 saliency_map,
@@ -401,12 +345,10 @@ class PerceptualOptimizer:
         else:
             saliency_resized = saliency_map
         
-        # Boost saturation in salient regions
         boost = params['vibrancy_boost']
         s_enhanced = s * (1 + (boost - 1) * saliency_resized)
         s_enhanced = np.clip(s_enhanced, 0, 255)
         
-        # Merge back
         hsv_enhanced = cv2.merge([h, s_enhanced, v]).astype(np.uint8)
         rgb_enhanced = cv2.cvtColor(hsv_enhanced, cv2.COLOR_HSV2RGB)
         
@@ -417,14 +359,10 @@ class PerceptualOptimizer:
         original: Image.Image,
         enhanced: Image.Image
     ) -> float:
-        """
-        Measure contrast improvement.
-        Uses RMS contrast metric.
-        """
+        """Measure contrast improvement using RMS contrast."""
         orig_array = np.array(original.convert('L')).astype(np.float32)
         enhanced_array = np.array(enhanced.convert('L')).astype(np.float32)
         
-        # RMS contrast
         orig_contrast = np.std(orig_array) / (np.mean(orig_array) + 1e-5)
         enhanced_contrast = np.std(enhanced_array) / (np.mean(enhanced_array) + 1e-5)
         
@@ -437,18 +375,13 @@ class PerceptualOptimizer:
         original: Image.Image,
         enhanced: Image.Image
     ) -> float:
-        """
-        Measure sharpness improvement.
-        Uses Laplacian variance.
-        """
+        """Measure sharpness improvement using Laplacian variance."""
         orig_array = np.array(original.convert('L'))
         enhanced_array = np.array(enhanced.convert('L'))
         
-        # Laplacian operator for edge detection
         orig_laplacian = cv2.Laplacian(orig_array, cv2.CV_64F)
         enhanced_laplacian = cv2.Laplacian(enhanced_array, cv2.CV_64F)
         
-        # Variance of Laplacian (higher = sharper)
         orig_sharpness = orig_laplacian.var()
         enhanced_sharpness = enhanced_laplacian.var()
         
@@ -458,22 +391,16 @@ class PerceptualOptimizer:
 
 
 if __name__ == "__main__":
-    # Test the optimizer
     print("Testing Perceptual Optimizer...")
     
-    # Create test image
     from PIL import ImageDraw
     test_img = Image.new('RGB', (512, 512), color='lightblue')
     draw = ImageDraw.Draw(test_img)
-    
-    # Draw a "product" rectangle
     draw.rectangle([150, 150, 350, 350], fill='red', outline='black', width=3)
     draw.text((200, 240), "PRODUCT", fill='white')
     
-    # Initialize optimizer
     optimizer = PerceptualOptimizer()
     
-    # Run optimization
     results = optimizer.optimize(
         image=test_img,
         target_regions=[(150, 150, 350, 350)],
@@ -481,11 +408,9 @@ if __name__ == "__main__":
         enhancement_level="medium"
     )
     
-    # Save results
     results['original'].save('test_original.png')
     results['optimized'].save('test_optimized.png')
     
-    # Save saliency visualization
     saliency_viz = (results['saliency_map'] * 255).astype(np.uint8)
     Image.fromarray(saliency_viz).save('test_saliency.png')
     
@@ -493,4 +418,3 @@ if __name__ == "__main__":
     print(f"  Saliency score: {results['analysis']['saliency_score']:.3f}")
     print(f"  Contrast improvement: {results['analysis']['contrast_improvement']:.1%}")
     print(f"  Sharpness improvement: {results['analysis']['sharpness_improvement']:.1%}")
-    print("\nCheck test_*.png files for results.")

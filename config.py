@@ -7,8 +7,7 @@ OUTPUT_DIR = BASE_DIR / "outputs"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 # Model settings
-DIFFUSION_MODEL = "stabilityai/stable-diffusion-2-1"
-# Alternative faster model: "runwayml/stable-diffusion-v1-5"
+DIFFUSION_MODEL = "runwayml/stable-diffusion-v1-5"
 
 # Generation settings
 IMAGE_HEIGHT = 512
@@ -21,3 +20,6 @@ LOGO_REGION_SIZE = (128, 128)  # Width, height for logo
 
 # Evaluation settings
 CLIP_MODEL = "ViT-B/32"
+
+# API keys
+GEMINI_API_KEY = "AIzaSyDFphVdNdeh6ClLlr1532BNl081rt-FRdQ"
