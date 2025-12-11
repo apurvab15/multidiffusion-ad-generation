@@ -345,9 +345,23 @@ class PerceptualOptimizer:
         else:
             saliency_resized = saliency_map
         
+        # Ensure saliency_resized has the same dtype and shape as s
+        saliency_resized = saliency_resized.astype(np.float32)
+        if saliency_resized.shape != s.shape:
+            # Force exact shape match
+            saliency_resized = cv2.resize(
+                saliency_resized,
+                (s.shape[1], s.shape[0]),
+                interpolation=cv2.INTER_LINEAR
+            ).astype(np.float32)
+        
         boost = params['vibrancy_boost']
         s_enhanced = s * (1 + (boost - 1) * saliency_resized)
-        s_enhanced = np.clip(s_enhanced, 0, 255)
+        s_enhanced = np.clip(s_enhanced, 0, 255).astype(np.float32)
+        
+        # Ensure all channels have the same dtype and shape before merging
+        h = h.astype(np.float32)
+        v = v.astype(np.float32)
         
         hsv_enhanced = cv2.merge([h, s_enhanced, v]).astype(np.uint8)
         rgb_enhanced = cv2.cvtColor(hsv_enhanced, cv2.COLOR_HSV2RGB)

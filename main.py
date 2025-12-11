@@ -26,6 +26,9 @@ Examples:
   python main.py --prompt "luxury watch ad" --seed 42 --optimization-level high
   python main.py --batch test_prompts.txt --no-optimization
   python main.py --prompt "tech ad" --bbox "100,100,400,400" --region-prompt "product shot"
+  python main.py --prompt "product ad" --logo logo.png --mask masks/mask1.png --mask-prompt "product showcase"
+  python main.py --prompt "ad" --masks mask1.png mask2.png --mask-prompts "product" "background"
+  python main.py --prompt "summer sale" --negative-prompt "blurry, low quality, distorted, text"
         """
     )
     
@@ -81,8 +84,7 @@ Examples:
         '--device',
         type=str,
         default='cuda',
-        choices=['cuda', 'cpu'],
-        help='Device to run on (default: cuda)'
+        help='Device to run on (default: cuda). Use "cuda:0", "cuda:1", etc. for specific GPUs, or "cpu"'
     )
     
     parser.add_argument(
@@ -103,6 +105,67 @@ Examples:
         '--no-save-intermediate',
         action='store_true',
         help='Do not save intermediate results'
+    )
+    
+    parser.add_argument(
+        '--mask',
+        type=str,
+        help='Path to single mask image file (grayscale, white=region)'
+    )
+    
+    parser.add_argument(
+        '--mask-prompt',
+        type=str,
+        help='Prompt for the single masked region (used with --mask)'
+    )
+    
+    parser.add_argument(
+        '--masks',
+        nargs='+',
+        help='Paths to multiple mask image files (for 2+ masks)'
+    )
+    
+    parser.add_argument(
+        '--mask-prompts',
+        nargs='+',
+        help='Prompts for each mask (must match number of --masks)'
+    )
+    
+    parser.add_argument(
+        '--mask-feather',
+        type=int,
+        default=10,
+        help='Feathering amount for mask edges (default: 10)'
+    )
+    
+    parser.add_argument(
+        '--logo-mask',
+        type=str,
+        help='Mask image to determine logo position (logo will be placed at mask centroid)'
+    )
+    
+    parser.add_argument(
+        '--background-prompt',
+        type=str,
+        help='Specific prompt for the background'
+    )
+    
+    parser.add_argument(
+        '--skip-evaluation',
+        action='store_true',
+        help='Skip evaluation step (faster generation)'
+    )
+    
+    parser.add_argument(
+        '--skip-optimization',
+        action='store_true',
+        help='Skip perceptual optimization step (faster generation)'
+    )
+    
+    parser.add_argument(
+        '--negative-prompt', '-n',
+        type=str,
+        help='Negative prompt (things to avoid in the image, e.g., "blurry, low quality, distorted")'
     )
     
     return parser.parse_args()
@@ -153,6 +216,16 @@ def run_single_generation(pipeline, args):
                 "importance": "high"
             })
     
+    # Validate mask arguments
+    if args.mask and args.masks:
+        print("Error: Cannot use both --mask and --masks. Use --masks for multiple masks.")
+        sys.exit(1)
+    
+    if args.masks and args.mask_prompts:
+        if len(args.mask_prompts) != len(args.masks):
+            print(f"Error: Number of --mask-prompts ({len(args.mask_prompts)}) must match number of --masks ({len(args.masks)})")
+            sys.exit(1)
+    
     # Run generation
     results = pipeline.generate(
         basic_prompt=args.prompt,
@@ -161,7 +234,17 @@ def run_single_generation(pipeline, args):
         output_name=args.output,
         seed=args.seed,
         save_intermediate=not args.no_save_intermediate,
-        optimization_level=args.optimization_level
+        optimization_level=args.optimization_level,
+        mask_path=args.mask,
+        mask_paths=args.masks,
+        mask_prompt=args.mask_prompt,
+        mask_prompts=args.mask_prompts,
+        mask_feather=args.mask_feather,
+        logo_mask_path=args.logo_mask,
+        background_prompt=args.background_prompt,
+        skip_evaluation=args.skip_evaluation,
+        skip_optimization=args.skip_optimization,
+        negative_prompt=args.negative_prompt
     )
     
     return results
@@ -195,7 +278,10 @@ def run_batch_generation(pipeline, args):
                 output_name=output_name,
                 seed=args.seed + i if args.seed else None,
                 save_intermediate=not args.no_save_intermediate,
-                optimization_level=args.optimization_level
+                optimization_level=args.optimization_level,
+                skip_evaluation=args.skip_evaluation,
+                skip_optimization=args.skip_optimization,
+                negative_prompt=args.negative_prompt
             )
             all_results.append(results)
         except Exception as e:
@@ -246,6 +332,7 @@ def main():
         print("  1. Make sure you have a CUDA-capable GPU")
         print("  2. Check that PyTorch is installed correctly")
         print("  3. Try running with --device cpu (slower)")
+        print("  4. Use --device cuda:0, cuda:1, etc. for specific GPUs")
         sys.exit(1)
     
     # Run generation

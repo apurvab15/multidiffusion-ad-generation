@@ -19,7 +19,7 @@ class PromptRefiner:
         if not api_key:
             raise ValueError("Set GEMINI_API_KEY or GOOGLE_API_KEY in the environment.")
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel("gemini-2.5-flash")
+        self.model = genai.GenerativeModel("gemini-2.5-pro")
         
     def refine_prompt(
         self,
@@ -43,12 +43,12 @@ class PromptRefiner:
         
         # Build the refinement prompt
         system_prompt = """You are an expert in advertising and visual design. 
-Your task is to transform simple ad concepts into detailed, professional prompts 
-for AI image generation that will create compelling advertisements."""
+Your task is to transform simple ad concepts into simple aesthetic professional prompts 
+for AI image generation that will create compelling pizza hut advertisements. No text overlay zone is needed, No humans are needed."""
         
         user_prompt = f"""
 I need to generate a professional advertisement with the following specifications:
-
+for the region prompt, it s circle pizza in the left lower side. pizza hutlogo on the top right corner
 **Basic Concept**: {basic_prompt}
 
 **Brand Colors** (from logo):
